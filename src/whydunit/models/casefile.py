@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -35,7 +35,7 @@ def _jsonify(value: Any) -> Any:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,13 +120,11 @@ class CaseFile:
                 "Supporting evidence:",
             ]
             lines += [
-                f"- [{item.kind.value}] {item.statement}"
-                for item in hypothesis.supporting
+                f"- [{item.kind.value}] {item.statement}" for item in hypothesis.supporting
             ] or ["- (none)"]
             lines.append("Contradicting evidence:")
             lines += [
-                f"- [{item.kind.value}] {item.statement}"
-                for item in hypothesis.contradicting
+                f"- [{item.kind.value}] {item.statement}" for item in hypothesis.contradicting
             ] or ["- (none)"]
             if hypothesis.next_step:
                 lines += ["", f"**Next investigation step:** {hypothesis.next_step}"]

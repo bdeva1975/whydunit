@@ -1,8 +1,8 @@
 """Tests for the core model layer."""
 
-from datetime import datetime, timedelta, timezone
-
 import json
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from whydunit.models.casefile import CaseFile
@@ -16,8 +16,6 @@ from whydunit.models.enums import (
 )
 from whydunit.models.hypothesis import Evidence, Hypothesis
 from whydunit.models.signal import Anomaly, CorrelationCluster, SignalRef
-
-UTC = timezone.utc
 
 
 def test_stage_declaration_order_is_topological() -> None:

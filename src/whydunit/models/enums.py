@@ -7,10 +7,10 @@ plagues telemetry codebases.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Stage(str, Enum):
+class Stage(StrEnum):
     """Pipeline stages, declared in topological (execution) order.
 
     ``list(Stage)`` therefore yields the canonical upstream-to-downstream
@@ -29,7 +29,7 @@ class Stage(str, Enum):
     DELIVERY = "delivery"
 
 
-class IncidentCategory(str, Enum):
+class IncidentCategory(StrEnum):
     """The classes of synthetic incident the simulator can inject.
 
     ``NORMAL`` is deliberately a category: the forensic engine must be
@@ -50,7 +50,7 @@ class IncidentCategory(str, Enum):
     MULTI_FACTOR = "multi_factor"
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     """Incident severity. ``NONE`` applies to normal operation."""
 
     NONE = "none"
@@ -60,14 +60,14 @@ class Severity(str, Enum):
     CRITICAL = "critical"
 
 
-class Direction(str, Enum):
+class Direction(StrEnum):
     """Which way a signal moved relative to its baseline."""
 
     UP = "up"
     DOWN = "down"
 
 
-class HealthState(str, Enum):
+class HealthState(StrEnum):
     """Per-stage health shown in the pipeline view."""
 
     HEALTHY = "healthy"
@@ -76,7 +76,7 @@ class HealthState(str, Enum):
     FAILED = "failed"
 
 
-class ConfidenceBand(str, Enum):
+class ConfidenceBand(StrEnum):
     """Qualitative confidence attached to a hypothesis.
 
     Deliberately not a probability: synthetic telemetry cannot prove
@@ -89,7 +89,7 @@ class ConfidenceBand(str, Enum):
     INSUFFICIENT = "insufficient"
 
 
-class EvidenceKind(str, Enum):
+class EvidenceKind(StrEnum):
     """Epistemic status of a piece of evidence."""
 
     OBSERVED = "observed"
