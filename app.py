@@ -285,19 +285,31 @@ def render_notes_and_casefile(result: InvestigationResult, scenario: dict) -> No
     st.markdown("#### Preview")
     st.markdown(case.to_markdown())
 
+    st.markdown("#### Export")
     left, right = st.columns(2)
     left.download_button(
-        "Export Markdown",
+        "Download Markdown",
         case.to_markdown(),
         file_name=f"{case.case_id}.md",
         mime="text/markdown",
     )
     right.download_button(
-        "Export JSON",
+        "Download JSON",
         case.to_json(),
         file_name=f"{case.case_id}.json",
         mime="application/json",
     )
+    st.caption("If the browser or corporate policy blocks downloads, save server-side instead:")
+    if st.button("Save to data/exports/"):
+        from pathlib import Path
+
+        export_dir = Path("data") / "exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        md_path = export_dir / f"{case.case_id}.md"
+        json_path = export_dir / f"{case.case_id}.json"
+        md_path.write_text(case.to_markdown(), encoding="utf-8")
+        json_path.write_text(case.to_json(), encoding="utf-8")
+        st.success(f"Saved: {md_path.resolve()} and {json_path.resolve()}")
 
 
 def render_ground_truth(truth: dict, days: float, seed: int) -> None:
