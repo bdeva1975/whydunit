@@ -1,9 +1,12 @@
 """Narrative incident reports, generated from a finished case file.
 
-The LLM writes prose; the case file supplies every fact. The prompt
-embeds an evidence registry with stable IDs and instructs the model to
-cite an ID for every factual claim. ``validator`` (separate module)
-rejects narratives that cite unknown IDs or make uncited claims.
+The LLM writes prose about the LEADING hypothesis only; the case file
+supplies every fact. The prompt embeds that hypothesis's evidence with
+stable IDs and instructs the model to cite an ID for every factual
+claim. ``validator`` rejects narratives that cite unknown IDs or make
+uncited claims. Alternative hypotheses are never given to the model:
+``report.narrate()`` appends the engine's ranking of them as a
+deterministic, machine-written section instead.
 
 The ``anthropic`` import is lazy: this module can be imported without
 the optional ``llm`` extra installed, and tests inject a stub client.
@@ -24,6 +27,7 @@ def evidence_registry(case: CaseFile) -> dict[str, Evidence]:
 
     Walks every hypothesis's supporting and contradicting lists; the
     same evidence item may back several hypotheses and is kept once.
+    Used by the validator: any of these IDs is a legal citation.
     """
     registry: dict[str, Evidence] = {}
     for hypothesis in case.hypotheses:
@@ -32,13 +36,23 @@ def evidence_registry(case: CaseFile) -> dict[str, Evidence]:
     return dict(sorted(registry.items()))
 
 
+def leading_evidence(case: CaseFile) -> dict[str, Evidence]:
+    """Evidence attached to the leading hypothesis only — the prompt's registry."""
+    if not case.hypotheses:
+        return {}
+    top = case.hypotheses[0]
+    registry = {item.id: item for item in (*top.supporting, *top.contradicting)}
+    return dict(sorted(registry.items()))
+
+
 def build_prompt(case: CaseFile, correction: str | None = None) -> str:
-    """The single-turn prompt: case facts, evidence registry, rules.
+    """The single-turn prompt: case facts, leading-hypothesis evidence, rules.
 
     ``correction`` carries validator feedback on a retry; it is appended
     as an explicit fix-list so the model rewrites rather than continues.
     """
-    registry = evidence_registry(case)
+    top = case.hypotheses[0]
+    registry = leading_evidence(case)
     example_id = next(iter(registry), "EVIDENCE-ID")
 
     evidence_lines = [
@@ -47,21 +61,20 @@ def build_prompt(case: CaseFile, correction: str | None = None) -> str:
         for item in registry.values()
     ]
 
-    hypothesis_lines = []
-    for rank, hypothesis in enumerate(case.hypotheses, start=1):
-        supporting = ", ".join(item.id for item in hypothesis.supporting) or "none"
-        contradicting = ", ".join(item.id for item in hypothesis.contradicting) or "none"
-        hypothesis_lines.append(
-            f"{rank}. {hypothesis.statement} "
-            f"[category: {hypothesis.category.value}, "
-            f"confidence: {hypothesis.confidence.value}, "
-            f"supporting: {supporting}, contradicting: {contradicting}]"
-        )
+    supporting = ", ".join(item.id for item in top.supporting) or "none"
+    contradicting = ", ".join(item.id for item in top.contradicting) or "none"
+    hypothesis_line = (
+        f"{top.statement} "
+        f"[category: {top.category.value}, "
+        f"confidence: {top.confidence.value}, "
+        f"supporting: {supporting}, contradicting: {contradicting}]"
+    )
 
     lines = [
         "You are writing the narrative section of a forensic incident report",
         "for an AI pipeline. A deterministic forensic engine has already done",
-        "the analysis; your job is ONLY to explain its findings in clear prose.",
+        "the analysis; your job is ONLY to explain its leading hypothesis in",
+        "clear prose.",
         "",
         "## Case facts",
         f"Pipeline: {case.pipeline_name}",
@@ -75,8 +88,8 @@ def build_prompt(case: CaseFile, correction: str | None = None) -> str:
         "## Evidence registry (the ONLY facts you may use)",
         *evidence_lines,
         "",
-        "## Ranked root-cause hypotheses (from the engine)",
-        *hypothesis_lines,
+        "## Leading hypothesis (the ONLY hypothesis you may discuss)",
+        hypothesis_line,
         "",
         "## Rules",
         "1. Cite evidence using ONLY IDs from the evidence registry above,",
@@ -86,20 +99,23 @@ def build_prompt(case: CaseFile, correction: str | None = None) -> str:
         "2. EVERY paragraph in 'What happened' and 'Why the engine believes",
         "   this' must contain at least one citation. This includes the",
         "   opening paragraph and any sentence that restates the engine's",
-        "   hypotheses, summary, severity, or the incident window: fold",
+        "   hypothesis, summary, severity, or the incident window: fold",
         "   those facts into sentences that also cite the evidence",
         "   supporting them. A paragraph with no citation is a validation",
         "   failure.",
-        "3. Do not introduce any number, signal name, cause, or event that",
+        "3. Discuss ONLY the leading hypothesis above. Do NOT mention, name,",
+        "   or allude to any other candidate cause — the engine's ranking of",
+        "   alternatives is appended to your narrative automatically.",
+        "4. Do not introduce any number, signal name, cause, or event that",
         "   is not in the registry or case facts. No speculation.",
-        "4. Do not upgrade the engine's confidence: describe the leading",
-        "   hypothesis using its stated confidence band, and mention that",
-        "   contradicting evidence exists where it does.",
-        "5. Structure: exactly three sections with these Markdown headings and",
+        "5. Do not upgrade the engine's confidence: describe the hypothesis",
+        "   using its stated confidence band, and mention that contradicting",
+        "   evidence exists where it does.",
+        "6. Structure: exactly three sections with these Markdown headings and",
         "   nothing else - 'What happened', 'Why the engine believes this',",
         "   'What to do next'. No introduction, no conclusion, no extra",
         "   sections. At most 400 words.",
-        "6. Do not add a disclaimer section; the case file carries one.",
+        "7. Do not add a disclaimer section; the case file carries one.",
     ]
 
     if correction:
@@ -122,10 +138,11 @@ def generate_narrative(
     (``client.messages.create``). When omitted, the real SDK client is
     created — which requires the ``llm`` extra and ``ANTHROPIC_API_KEY``.
     """
-    if not evidence_registry(case):
+    if not leading_evidence(case):
         raise ValueError(
-            "Case file contains no evidence; there is nothing for a narrative "
-            "to cite. Narratives are only generated for investigated incidents."
+            "The leading hypothesis carries no evidence; there is nothing for "
+            "a narrative to cite. Narratives are only generated for "
+            "investigated incidents."
         )
 
     if client is None:

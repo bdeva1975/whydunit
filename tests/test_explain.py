@@ -4,7 +4,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from whydunit.explain.narrative import build_prompt, evidence_registry, generate_narrative
+from whydunit.explain.narrative import (
+    build_prompt,
+    evidence_registry,
+    generate_narrative,
+    leading_evidence,
+)
 from whydunit.models import (
     CaseFile,
     ConfidenceBand,
@@ -36,6 +41,7 @@ def _case(with_evidence: bool = True) -> CaseFile:
     shared = _evidence("EV-1", "Retrieval similarity dropped 38% below baseline")
     second = _evidence("EV-2", "Groundedness fell in the same window")
     contra = _evidence("EV-3", "Token throughput stayed flat")
+    rival_only = _evidence("EV-9", "Latency rose on the inference stage")
     hypotheses = (
         Hypothesis(
             id="HYP-1",
@@ -53,7 +59,7 @@ def _case(with_evidence: bool = True) -> CaseFile:
             category=IncidentCategory.MODEL_REGRESSION,
             statement="Model output quality regressed",
             affected_stages=(Stage.MODEL_INFERENCE,),
-            supporting=(shared,) if with_evidence else (),
+            supporting=(shared, rival_only) if with_evidence else (),
             score=2.0,
             confidence=ConfidenceBand.WEAK,
         ),
@@ -110,7 +116,12 @@ class _FakeClient:
 
 def test_registry_deduplicates_across_hypotheses() -> None:
     registry = evidence_registry(_case())
-    assert sorted(registry) == ["EV-1", "EV-2", "EV-3"]  # EV-1 shared, kept once
+    assert sorted(registry) == ["EV-1", "EV-2", "EV-3", "EV-9"]  # EV-1 shared, kept once
+
+
+def test_leading_evidence_is_top_hypothesis_only() -> None:
+    registry = leading_evidence(_case())
+    assert sorted(registry) == ["EV-1", "EV-2", "EV-3"]  # EV-9 belongs to the rival
 
 
 def test_prompt_carries_facts_evidence_and_rules() -> None:
@@ -122,6 +133,13 @@ def test_prompt_carries_facts_evidence_and_rules() -> None:
     assert "ONLY IDs from the evidence registry above" in prompt
     assert "for\n   example [EV-1]" in prompt  # dynamic example uses a real ID
     assert "confidence: strong" in prompt
+
+
+def test_prompt_excludes_rival_hypotheses() -> None:
+    prompt = build_prompt(_case())
+    assert "Model output quality regressed" not in prompt
+    assert "[EV-9]" not in prompt
+    assert "ONLY hypothesis you may discuss" in prompt
 
 
 def test_generate_narrative_uses_injected_client() -> None:

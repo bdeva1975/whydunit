@@ -24,7 +24,7 @@ BAD_UNKNOWN = "## What happened\n\nRetrieval fell hard [EV-99]."
 BAD_UNCITED = "## What happened\n\nA network partition caused everything."
 
 
-def _case() -> CaseFile:
+def _case(with_rival: bool = False) -> CaseFile:
     signal = SignalRef(stage=Stage.RETRIEVAL, metric="top_k_similarity")
     evidence = Evidence(
         id="EV-1",
@@ -33,15 +33,29 @@ def _case() -> CaseFile:
         signals=(signal,),
         weight=1.0,
     )
-    hypothesis = Hypothesis(
-        id="HYP-1",
-        category=IncidentCategory.RETRIEVAL_DEGRADATION,
-        statement="Retrieval quality degraded",
-        affected_stages=(Stage.RETRIEVAL,),
-        supporting=(evidence,),
-        score=5.0,
-        confidence=ConfidenceBand.STRONG,
-    )
+    hypotheses = [
+        Hypothesis(
+            id="HYP-1",
+            category=IncidentCategory.RETRIEVAL_DEGRADATION,
+            statement="Retrieval quality degraded",
+            affected_stages=(Stage.RETRIEVAL,),
+            supporting=(evidence,),
+            score=5.0,
+            confidence=ConfidenceBand.STRONG,
+        )
+    ]
+    if with_rival:
+        hypotheses.append(
+            Hypothesis(
+                id="HYP-2",
+                category=IncidentCategory.CASCADING_FAILURE,
+                statement="A cascading failure swept downstream",
+                affected_stages=(Stage.RETRIEVAL,),
+                supporting=(evidence,),
+                score=2.5,
+                confidence=ConfidenceBand.MODERATE,
+            )
+        )
     return CaseFile(
         case_id="CASE-R",
         incident_id="INC-R",
@@ -50,7 +64,7 @@ def _case() -> CaseFile:
         window_end=START + timedelta(minutes=30),
         severity=Severity.HIGH,
         summary="Test case.",
-        hypotheses=(hypothesis,),
+        hypotheses=tuple(hypotheses),
     )
 
 
@@ -87,9 +101,20 @@ def test_valid_first_attempt_no_retry() -> None:
     client = _SeqClient([GOOD])
     report = narrate(_case(), client=client)
     assert report.attempts == 1
-    assert report.text == GOOD
+    assert report.text == GOOD  # single hypothesis: nothing appended
     assert report.validation.valid
     assert len(client.messages.calls) == 1
+
+
+def test_alternatives_section_is_machine_appended() -> None:
+    client = _SeqClient([GOOD])
+    report = narrate(_case(with_rival=True), client=client)
+    assert report.text.startswith(GOOD)
+    assert "## Alternatives the engine considered" in report.text
+    assert "cascading_failure — moderate (score 2.50)" in report.text
+    assert "machine-written" in report.text
+    prompt = client.messages.calls[0]["messages"][0]["content"]
+    assert "cascading" not in prompt  # the model never saw the rival
 
 
 def test_invalid_then_valid_retries_with_feedback() -> None:

@@ -11,6 +11,7 @@ one place the answer key is shown, and it says so loudly.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
@@ -285,6 +286,41 @@ def render_notes_and_casefile(result: InvestigationResult, scenario: dict) -> No
     st.markdown("#### Preview")
     st.markdown(case.to_markdown())
 
+    st.markdown("#### AI narrative report (optional)")
+    st.caption(
+        "Written by an LLM that may only cite the deterministic evidence in this "
+        "case file. Narratives that fail citation validation are refused, never shown."
+    )
+    narrative_key = f"narrative-{scenario['id']}-{case.case_id}"
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        st.info(
+            "To enable: install the extra (`uv sync --extra llm`) and set "
+            "`ANTHROPIC_API_KEY` in the environment before starting the app."
+        )
+    elif st.button("Generate narrative"):
+        from whydunit.explain import NarrativeValidationError, narrate
+
+        try:
+            with st.spinner("Generating and validating narrative…"):
+                report = narrate(case)
+        except NarrativeValidationError as error:
+            st.error(
+                "Narrative refused by the validator after "
+                f"{error.attempts} attempt(s): " + "; ".join(error.problems)
+            )
+        except Exception as error:
+            st.error(f"Narrative generation failed: {error}")
+        else:
+            st.session_state[narrative_key] = report
+
+    report = st.session_state.get(narrative_key)
+    if report is not None:
+        st.success(
+            f"Validated on attempt {report.attempts}; "
+            f"cites {len(report.validation.cited_ids)} evidence IDs."
+        )
+        st.markdown(report.text)
+
     st.markdown("#### Export")
     left, right = st.columns(2)
     left.download_button(
@@ -305,11 +341,17 @@ def render_notes_and_casefile(result: InvestigationResult, scenario: dict) -> No
 
         export_dir = Path("data") / "exports"
         export_dir.mkdir(parents=True, exist_ok=True)
-        md_path = export_dir / f"{case.case_id}.md"
-        json_path = export_dir / f"{case.case_id}.json"
+        base = f"{case.case_id}-{case.incident_id}"
+        md_path = export_dir / f"{base}.md"
+        json_path = export_dir / f"{base}.json"
         md_path.write_text(case.to_markdown(), encoding="utf-8")
         json_path.write_text(case.to_json(), encoding="utf-8")
-        st.success(f"Saved: {md_path.resolve()} and {json_path.resolve()}")
+        saved = [md_path, json_path]
+        if report is not None:
+            narrative_path = export_dir / f"{base}-narrative.md"
+            narrative_path.write_text(report.text + "\n", encoding="utf-8")
+            saved.append(narrative_path)
+        st.success("Saved: " + ", ".join(str(path.resolve()) for path in saved))
 
 
 def render_ground_truth(truth: dict, days: float, seed: int) -> None:
