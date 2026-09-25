@@ -2,6 +2,8 @@
 
 **Find the *why* behind AI pipeline failures.**
 
+![Dashboard](docs/images/dashboard.png)
+
 Your LLM just returned a garbage answer at 10:42. Was the model at fault?
 Or did the real failure start at 10:19 — three stages upstream, in a
 schema change your dashboards happily graphed without connecting to
@@ -123,6 +125,8 @@ Load `retrieval_degradation` (the default) and walk the console:
    your notes, ready for the incident channel
 
 The LLM's hallucinations were a symptom. The index build was the story.
+
+![Evidence graph](docs/images/evidence-graph.png)
 
 ## The pipeline
 
