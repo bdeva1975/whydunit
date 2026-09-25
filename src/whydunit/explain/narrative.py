@@ -32,8 +32,12 @@ def evidence_registry(case: CaseFile) -> dict[str, Evidence]:
     return dict(sorted(registry.items()))
 
 
-def build_prompt(case: CaseFile) -> str:
-    """The single-turn prompt: case facts, evidence registry, rules."""
+def build_prompt(case: CaseFile, correction: str | None = None) -> str:
+    """The single-turn prompt: case facts, evidence registry, rules.
+
+    ``correction`` carries validator feedback on a retry; it is appended
+    as an explicit fix-list so the model rewrites rather than continues.
+    """
     registry = evidence_registry(case)
 
     evidence_lines = [
@@ -53,43 +57,44 @@ def build_prompt(case: CaseFile) -> str:
             f"supporting: {supporting}, contradicting: {contradicting}]"
         )
 
-    return "\n".join(
-        [
-            "You are writing the narrative section of a forensic incident report",
-            "for an AI pipeline. A deterministic forensic engine has already done",
-            "the analysis; your job is ONLY to explain its findings in clear prose.",
-            "",
-            "## Case facts",
-            f"Pipeline: {case.pipeline_name}",
-            f"Incident window (UTC): {case.window_start.isoformat()}"
-            f" to {case.window_end.isoformat()}",
-            f"Severity: {case.severity.value}",
-            f"Engine summary: {case.summary}",
-            "",
-            "## Symptoms",
-            *[f"- {symptom}" for symptom in case.symptoms],
-            "",
-            "## Evidence registry (the ONLY facts you may use)",
-            *evidence_lines,
-            "",
-            "## Ranked root-cause hypotheses (from the engine)",
-            *hypothesis_lines,
-            "",
-            "## Rules",
-            "1. Every factual claim MUST end with one or more citations in the",
-            "   form [EV-n], using ONLY IDs from the evidence registry above.",
-            "2. Do not introduce any number, signal name, cause, or event that",
-            "   is not in the registry or case facts. No speculation.",
-            "3. Do not upgrade the engine's confidence: describe the leading",
-            "   hypothesis using its stated confidence band, and mention that",
-            "   contradicting evidence exists where it does.",
-            "4. Structure: 'What happened', 'Why the engine believes this',",
-            "   'What to do next'. Markdown headings. At most 400 words.",
-            "5. Do not add a disclaimer section; the case file carries one.",
-            "",
-            "Write the narrative now.",
-        ]
-    )
+    lines = [
+        "You are writing the narrative section of a forensic incident report",
+        "for an AI pipeline. A deterministic forensic engine has already done",
+        "the analysis; your job is ONLY to explain its findings in clear prose.",
+        "",
+        "## Case facts",
+        f"Pipeline: {case.pipeline_name}",
+        f"Incident window (UTC): {case.window_start.isoformat()} to {case.window_end.isoformat()}",
+        f"Severity: {case.severity.value}",
+        f"Engine summary: {case.summary}",
+        "",
+        "## Symptoms",
+        *[f"- {symptom}" for symptom in case.symptoms],
+        "",
+        "## Evidence registry (the ONLY facts you may use)",
+        *evidence_lines,
+        "",
+        "## Ranked root-cause hypotheses (from the engine)",
+        *hypothesis_lines,
+        "",
+        "## Rules",
+        "1. Every factual claim MUST end with one or more citations in the",
+        "   form [EV-n], using ONLY IDs from the evidence registry above.",
+        "2. Do not introduce any number, signal name, cause, or event that",
+        "   is not in the registry or case facts. No speculation.",
+        "3. Do not upgrade the engine's confidence: describe the leading",
+        "   hypothesis using its stated confidence band, and mention that",
+        "   contradicting evidence exists where it does.",
+        "4. Structure: 'What happened', 'Why the engine believes this',",
+        "   'What to do next'. Markdown headings. At most 400 words.",
+        "5. Do not add a disclaimer section; the case file carries one.",
+    ]
+
+    if correction:
+        lines += ["", "## Correction required", correction]
+
+    lines += ["", "Write the narrative now."]
+    return "\n".join(lines)
 
 
 def generate_narrative(
@@ -97,6 +102,7 @@ def generate_narrative(
     client: Any | None = None,
     model: str = DEFAULT_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    correction: str | None = None,
 ) -> str:
     """Ask the model for a narrative. Raises if there is nothing to explain.
 
@@ -122,7 +128,7 @@ def generate_narrative(
     response = client.messages.create(
         model=model,
         max_tokens=max_tokens,
-        messages=[{"role": "user", "content": build_prompt(case)}],
+        messages=[{"role": "user", "content": build_prompt(case, correction=correction)}],
     )
     text = "".join(
         getattr(block, "text", "")
