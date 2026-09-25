@@ -1,6 +1,6 @@
 [project]
 name = "whydunit"
-version = "0.1.0"
+version = "0.2.0"
 description = "A forensic investigation console for AI pipeline failures"
 readme = "README.md"
 license = { text = "MIT" }
