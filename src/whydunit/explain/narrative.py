@@ -39,6 +39,7 @@ def build_prompt(case: CaseFile, correction: str | None = None) -> str:
     as an explicit fix-list so the model rewrites rather than continues.
     """
     registry = evidence_registry(case)
+    example_id = next(iter(registry), "EVIDENCE-ID")
 
     evidence_lines = [
         f"[{item.id}] ({item.kind.value}) {item.statement} "
@@ -78,16 +79,27 @@ def build_prompt(case: CaseFile, correction: str | None = None) -> str:
         *hypothesis_lines,
         "",
         "## Rules",
-        "1. Every factual claim MUST end with one or more citations in the",
-        "   form [EV-n], using ONLY IDs from the evidence registry above.",
-        "2. Do not introduce any number, signal name, cause, or event that",
+        "1. Cite evidence using ONLY IDs from the evidence registry above,",
+        "   in square brackets, copied character-for-character — for",
+        f"   example [{example_id}]. Never invent, shorten, prefix, or",
+        "   reformat an ID.",
+        "2. EVERY paragraph in 'What happened' and 'Why the engine believes",
+        "   this' must contain at least one citation. This includes the",
+        "   opening paragraph and any sentence that restates the engine's",
+        "   hypotheses, summary, severity, or the incident window: fold",
+        "   those facts into sentences that also cite the evidence",
+        "   supporting them. A paragraph with no citation is a validation",
+        "   failure.",
+        "3. Do not introduce any number, signal name, cause, or event that",
         "   is not in the registry or case facts. No speculation.",
-        "3. Do not upgrade the engine's confidence: describe the leading",
+        "4. Do not upgrade the engine's confidence: describe the leading",
         "   hypothesis using its stated confidence band, and mention that",
         "   contradicting evidence exists where it does.",
-        "4. Structure: 'What happened', 'Why the engine believes this',",
-        "   'What to do next'. Markdown headings. At most 400 words.",
-        "5. Do not add a disclaimer section; the case file carries one.",
+        "5. Structure: exactly three sections with these Markdown headings and",
+        "   nothing else - 'What happened', 'Why the engine believes this',",
+        "   'What to do next'. No introduction, no conclusion, no extra",
+        "   sections. At most 400 words.",
+        "6. Do not add a disclaimer section; the case file carries one.",
     ]
 
     if correction:

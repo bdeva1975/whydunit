@@ -119,7 +119,8 @@ def test_prompt_carries_facts_evidence_and_rules() -> None:
     assert "retrieval.top_k_similarity" in prompt
     assert "supporting: EV-1, EV-2, contradicting: EV-3" in prompt
     assert START.isoformat() in prompt
-    assert "ONLY IDs from the evidence registry" in prompt
+    assert "ONLY IDs from the evidence registry above" in prompt
+    assert "for\n   example [EV-1]" in prompt  # dynamic example uses a real ID
     assert "confidence: strong" in prompt
 
 
